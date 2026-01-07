@@ -14,6 +14,7 @@ public class Player {
         this.position = position;
         this.team = team;
     }
+
     public String getName() { return name; }
     public void setName(String name) { this.name = name; }
 
@@ -27,6 +28,10 @@ public class Player {
     public void setTeam(Team team) { this.team = team; }
 
     public int getId() {
-        return 0;
+        return id;
+    }
+
+    public void setId(int id) {
+        this.id = id;
     }
 }

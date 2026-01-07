@@ -125,7 +125,7 @@ public class DataRetriever {
             checkStmt = connection.prepareStatement(checkSql);
             insertStmt = connection.prepareStatement(insertSql);
 
-            // Vérification des IDs existants
+
             for (Player player : newPlayers) {
                 checkStmt.setInt(1, player.getId());
                 rs = checkStmt.executeQuery();
@@ -136,7 +136,7 @@ public class DataRetriever {
                 rs.close();
             }
 
-            // Insertion des nouveaux joueurs
+
             for (Player player : newPlayers) {
                 insertStmt.setInt(1, player.getId());
                 insertStmt.setString(2, player.getName());
@@ -185,7 +185,7 @@ public class DataRetriever {
             String clearPlayersSql = "UPDATE Player SET id_team = NULL WHERE id_team = ?";
             String attachPlayerSql = "UPDATE Player SET id_team = ? WHERE id = ?";
 
-            // Vérifier si l'équipe existe déjà (CORRECTION DU BUG ICI)
+
             checkStmt = connection.prepareStatement(checkSql);
             checkStmt.setInt(1, team.getId());
             rs = checkStmt.executeQuery();
@@ -207,12 +207,11 @@ public class DataRetriever {
                 updateStmt.executeUpdate();
             }
 
-            // Dissocier tous les joueurs de cette équipe
+
             clearStmt = connection.prepareStatement(clearPlayersSql);
             clearStmt.setInt(1, team.getId());
             clearStmt.executeUpdate();
 
-            // Ré-attacher les joueurs actuels
             attachStmt = connection.prepareStatement(attachPlayerSql);
             for (Player player : team.getPlayers()) {
                 attachStmt.setInt(1, team.getId());

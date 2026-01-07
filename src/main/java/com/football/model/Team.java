@@ -5,11 +5,13 @@ import java.util.List;
 import java.util.Objects;
 
 public class Team {
+    private int id;
     private String name;
     private ContinentEnum continent;
     private List<Player> players;
 
     public Team(int id, String name, ContinentEnum continent) {
+        this.id = id;
         this.name = name;
         this.continent = continent;
         this.players = new ArrayList<>();
@@ -28,19 +30,27 @@ public class Team {
         this.players.add(player);
     }
 
+    public int getId() {
+        return id;
+    }
+
+    public void setId(int id) {
+        this.id = id;
+    }
+
     @Override
     public boolean equals(Object o) {
+        if (this == o) return true;
         if (o == null || getClass() != o.getClass()) return false;
         Team team = (Team) o;
-        return Objects.equals(name, team.name) && continent == team.continent && Objects.equals(players, team.players);
+        return id == team.id &&
+                Objects.equals(name, team.name) &&
+                continent == team.continent &&
+                Objects.equals(players, team.players);
     }
 
     @Override
     public int hashCode() {
-        return Objects.hash(name, continent, players);
-    }
-
-    public int getId() {
-            return 0;
+        return Objects.hash(id, name, continent, players);
     }
 }
