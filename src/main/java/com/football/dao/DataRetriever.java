@@ -30,7 +30,7 @@ public class DataRetriever {
             connection = dbConnection.getDBConnection();
 
             String teamSql = "SELECT id, name, continent FROM Team WHERE id = ?";
-            String playerSql = "SELECT id, name, age, position FROM Player WHERE id_team = ?";
+            String playerSql = "SELECT id, name, age, position, goal_nb FROM Player WHERE id_team = ?";
 
             teamStmt = connection.prepareStatement(teamSql);
             teamStmt.setInt(1, id);
@@ -55,8 +55,10 @@ public class DataRetriever {
                             PlayerPositionEnum.valueOf(playerRs.getString("position")),
                             team
                     );
-                    team.getPlayers().add(player);
-                }
+
+                    Integer goalNb = playerRs.getObject("goal_nb", Integer.class);
+                    player.setGoalNb(goalNb);
+                    team.getPlayers().add(player);}
             }
 
         } catch (SQLException e) {
@@ -81,20 +83,25 @@ public class DataRetriever {
 
         try {
             connection = dbConnection.getDBConnection();
-            String sql = "SELECT id, name, age, position FROM Player ORDER BY id LIMIT ? OFFSET ?";
+            String sql = "SELECT id, name, age, position, goal_nb FROM Player ORDER BY id LIMIT ? OFFSET ?";
             stmt = connection.prepareStatement(sql);
             stmt.setInt(1, size);
             stmt.setInt(2, offset);
             rs = stmt.executeQuery();
 
             while (rs.next()) {
-                players.add(new Player(
+                Player player = new Player(
                         rs.getInt("id"),
                         rs.getString("name"),
                         rs.getInt("age"),
                         PlayerPositionEnum.valueOf(rs.getString("position")),
                         null
-                ));
+                );
+
+                player.setGoalNb(rs.getObject("goal_nb", Integer.class));
+
+                players.add(player);
+
             }
 
         } catch (SQLException e) {
@@ -115,8 +122,8 @@ public class DataRetriever {
         ResultSet rs = null;
 
         String checkSql = "SELECT COUNT(*) FROM Player WHERE id = ?";
-        String insertSql = "INSERT INTO Player (id, name, age, position, id_team) " +
-                "VALUES (?, ?, ?, ?::position_enum, ?)";
+        String insertSql = "INSERT INTO Player (id, name, age, position, id_team, goal_nb)\n" +
+                "VALUES (?, ?, ?, ?::position_enum, ?, ?)\n";
 
         try {
             connection = dbConnection.getDBConnection();
@@ -149,7 +156,8 @@ public class DataRetriever {
                     insertStmt.setNull(5, Types.INTEGER);
                 }
 
-                insertStmt.executeUpdate();
+                insertStmt.setObject(6, player.getGoalNb(), Types.INTEGER);
+
             }
 
             connection.commit();
@@ -284,7 +292,7 @@ public class DataRetriever {
             connection = dbConnection.getDBConnection();
 
             StringBuilder sql = new StringBuilder(
-                    "SELECT p.id, p.name, p.age, p.position " +
+                    "SELECT p.id, p.name, p.age, p.position, p.goal_nb\n " +
                             "FROM Player p " +
                             "LEFT JOIN Team t ON p.id_team = t.id " +
                             "WHERE 1=1"
@@ -311,13 +319,18 @@ public class DataRetriever {
             rs = stmt.executeQuery();
 
             while (rs.next()) {
-                players.add(new Player(
+                Player player = new Player(
                         rs.getInt("id"),
                         rs.getString("name"),
                         rs.getInt("age"),
                         PlayerPositionEnum.valueOf(rs.getString("position")),
                         null
-                ));
+                );
+
+                player.setGoalNb(rs.getObject("goal_nb", Integer.class));
+
+                players.add(player);
+
             }
 
         } catch (SQLException e) {

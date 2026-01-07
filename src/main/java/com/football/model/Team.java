@@ -17,6 +17,9 @@ public class Team {
         this.players = new ArrayList<>();
     }
 
+    public int getId() { return id; }
+    public void setId(int id) { this.id = id; }
+
     public String getName() { return name; }
     public void setName(String name) { this.name = name; }
 
@@ -26,16 +29,25 @@ public class Team {
     public List<Player> getPlayers() { return players; }
     public void setPlayers(List<Player> players) { this.players = players; }
 
+
     public void addPlayer(Player player) {
         this.players.add(player);
     }
 
-    public int getId() {
-        return id;
-    }
+    public int getPlayersGoals() {
+        if (players == null || players.isEmpty()) return 0;
 
-    public void setId(int id) {
-        this.id = id;
+        int totalGoals = 0;
+        for (Player player : players) {
+            if (player.getGoalNb() == null) {
+                throw new RuntimeException(
+                        "Impossible de calculer le nombre total de buts : le joueur "
+                                + player.getName() + " a un nombre de buts inconnu."
+                );
+            }
+            totalGoals += player.getGoalNb();
+        }
+        return totalGoals;
     }
 
     @Override
