@@ -1,18 +1,19 @@
 package com.football.model;
 
 public class Player {
+    private int id;
     private String name;
     private int age;
     private PlayerPositionEnum position;
     private Team team;
 
     public Player(int id, String name, int age, PlayerPositionEnum position, Team team) {
+        this.id = id;
         this.name = name;
         this.age = age;
         this.position = position;
         this.team = team;
     }
-
     public String getName() { return name; }
     public void setName(String name) { this.name = name; }
 

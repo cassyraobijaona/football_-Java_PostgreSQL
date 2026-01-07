@@ -12,18 +12,29 @@ import java.util.List;
 
 public class DataRetriever {
 
-    private final DBConnection dbConnection = new DBConnection();
+    private final DBConnection dbConnection;
+
+    public DataRetriever() {
+        this.dbConnection = new DBConnection();
+    }
+
     public Team findTeamById(Integer id) {
+        Connection connection = null;
+        PreparedStatement teamStmt = null;
+        PreparedStatement playerStmt = null;
+        ResultSet teamRs = null;
+        ResultSet playerRs = null;
         Team team = null;
 
-        String teamSql = "SELECT id, name, continent FROM team WHERE id = ?";
-        String playerSql = "SELECT id, name, age, position FROM player WHERE id_team = ?";
+        try {
+            connection = dbConnection.getDBConnection();
 
-        try (Connection connection = dbConnection.getDBConnection();
-             PreparedStatement teamStmt = connection.prepareStatement(teamSql);
-             PreparedStatement playerStmt = connection.prepareStatement(playerSql)) {
+            String teamSql = "SELECT id, name, continent FROM Team WHERE id = ?";
+            String playerSql = "SELECT id, name, age, position FROM Player WHERE id_team = ?";
+
+            teamStmt = connection.prepareStatement(teamSql);
             teamStmt.setInt(1, id);
-            ResultSet teamRs = teamStmt.executeQuery();
+            teamRs = teamStmt.executeQuery();
 
             if (teamRs.next()) {
                 team = new Team(
@@ -32,8 +43,9 @@ public class DataRetriever {
                         ContinentEnum.valueOf(teamRs.getString("continent"))
                 );
 
+                playerStmt = connection.prepareStatement(playerSql);
                 playerStmt.setInt(1, id);
-                ResultSet playerRs = playerStmt.executeQuery();
+                playerRs = playerStmt.executeQuery();
 
                 while (playerRs.next()) {
                     Player player = new Player(
@@ -46,34 +58,35 @@ public class DataRetriever {
                     team.getPlayers().add(player);
                 }
             }
+
         } catch (SQLException e) {
             throw new RuntimeException(e);
+        } finally {
+            try { if (playerRs != null) playerRs.close(); } catch (Exception ignored) {}
+            try { if (playerStmt != null) playerStmt.close(); } catch (Exception ignored) {}
+            try { if (teamRs != null) teamRs.close(); } catch (Exception ignored) {}
+            try { if (teamStmt != null) teamStmt.close(); } catch (Exception ignored) {}
+            try { if (connection != null) connection.close(); } catch (Exception ignored) {}
         }
 
         return team;
     }
 
-
-
     public List<Player> findPlayers(int page, int size) {
-
+        Connection connection = null;
+        PreparedStatement stmt = null;
+        ResultSet rs = null;
         List<Player> players = new ArrayList<>();
         int offset = (page - 1) * size;
 
-        String sql = """
-            SELECT id, name, age, position
-            FROM player
-            ORDER BY id
-            LIMIT ? OFFSET ?
-        """;
-
-        try (Connection connection = dbConnection.getDBConnection();
-             PreparedStatement stmt = connection.prepareStatement(sql)) {
-
+        try {
+            connection = dbConnection.getDBConnection();
+            String sql = "SELECT id, name, age, position FROM Player ORDER BY id LIMIT ? OFFSET ?";
+            stmt = connection.prepareStatement(sql);
             stmt.setInt(1, size);
             stmt.setInt(2, offset);
+            rs = stmt.executeQuery();
 
-            ResultSet rs = stmt.executeQuery();
             while (rs.next()) {
                 players.add(new Player(
                         rs.getInt("id"),
@@ -86,119 +99,159 @@ public class DataRetriever {
 
         } catch (SQLException e) {
             throw new RuntimeException(e);
+        } finally {
+            try { if (rs != null) rs.close(); } catch (Exception ignored) {}
+            try { if (stmt != null) stmt.close(); } catch (Exception ignored) {}
+            try { if (connection != null) connection.close(); } catch (Exception ignored) {}
         }
 
         return players;
     }
 
-
-
     public List<Player> createPlayers(List<Player> newPlayers) {
+        Connection connection = null;
+        PreparedStatement checkStmt = null;
+        PreparedStatement insertStmt = null;
+        ResultSet rs = null;
 
-        String checkSql = "SELECT COUNT(*) FROM player WHERE id = ?";
-        String insertSql = "INSERT INTO player(id, name, age, position, id_team) VALUES (?, ?, ?, ?, ?)";
+        String checkSql = "SELECT COUNT(*) FROM Player WHERE id = ?";
+        String insertSql = "INSERT INTO Player (id, name, age, position, id_team) " +
+                "VALUES (?, ?, ?, ?::position_enum, ?)";
 
-        try (Connection connection = dbConnection.getDBConnection()) {
+        try {
+            connection = dbConnection.getDBConnection();
             connection.setAutoCommit(false);
 
-            try (PreparedStatement checkStmt = connection.prepareStatement(checkSql);
-                 PreparedStatement insertStmt = connection.prepareStatement(insertSql)) {
+            checkStmt = connection.prepareStatement(checkSql);
+            insertStmt = connection.prepareStatement(insertSql);
 
-
-                for (Player player : newPlayers) {
-                    checkStmt.setInt(1, player.getId());
-                    ResultSet rs = checkStmt.executeQuery();
-                    rs.next();
-
-                    if (rs.getInt(1) > 0) {
-                        throw new RuntimeException("Player already exists : " + player.getName());
-                    }
+            // Vérification des IDs existants
+            for (Player player : newPlayers) {
+                checkStmt.setInt(1, player.getId());
+                rs = checkStmt.executeQuery();
+                rs.next();
+                if (rs.getInt(1) > 0) {
+                    throw new RuntimeException("Player already exists with id: " + player.getId());
                 }
-
-                for (Player player : newPlayers) {
-                    insertStmt.setInt(1, player.getId());
-                    insertStmt.setString(2, player.getName());
-                    insertStmt.setInt(3, player.getAge());
-                    insertStmt.setString(4, player.getPosition().name());
-                    insertStmt.setNull(5, Types.INTEGER);
-
-                    insertStmt.executeUpdate();
-                }
-
-                connection.commit();
-                return newPlayers;
-
-            } catch (Exception e) {
-                connection.rollback();
-                throw e;
+                rs.close();
             }
 
+            // Insertion des nouveaux joueurs
+            for (Player player : newPlayers) {
+                insertStmt.setInt(1, player.getId());
+                insertStmt.setString(2, player.getName());
+                insertStmt.setInt(3, player.getAge());
+                insertStmt.setString(4, player.getPosition().name());
+
+                if (player.getTeam() != null) {
+                    insertStmt.setInt(5, player.getTeam().getId());
+                } else {
+                    insertStmt.setNull(5, Types.INTEGER);
+                }
+
+                insertStmt.executeUpdate();
+            }
+
+            connection.commit();
+            return newPlayers;
+
         } catch (SQLException e) {
+            try { if (connection != null) connection.rollback(); } catch (Exception ignored) {}
             throw new RuntimeException(e);
+        } finally {
+            try { if (rs != null) rs.close(); } catch (Exception ignored) {}
+            try { if (checkStmt != null) checkStmt.close(); } catch (Exception ignored) {}
+            try { if (insertStmt != null) insertStmt.close(); } catch (Exception ignored) {}
+            try { if (connection != null) connection.close(); } catch (Exception ignored) {}
         }
     }
-
-
 
     public Team saveTeam(Team team) {
+        Connection connection = null;
+        PreparedStatement checkStmt = null;
+        PreparedStatement insertStmt = null;
+        PreparedStatement updateStmt = null;
+        PreparedStatement clearStmt = null;
+        PreparedStatement attachStmt = null;
+        ResultSet rs = null;
 
-        String updateTeamSql = "UPDATE team SET name = ?, continent = ? WHERE id = ?";
-        String clearPlayersSql = "UPDATE player SET id_team = NULL WHERE id_team = ?";
-        String attachPlayerSql = "UPDATE player SET id_team = ? WHERE id = ?";
-
-        try (Connection connection = dbConnection.getDBConnection()) {
+        try {
+            connection = dbConnection.getDBConnection();
             connection.setAutoCommit(false);
 
-            try (PreparedStatement teamStmt = connection.prepareStatement(updateTeamSql);
-                 PreparedStatement clearStmt = connection.prepareStatement(clearPlayersSql);
-                 PreparedStatement attachStmt = connection.prepareStatement(attachPlayerSql)) {
+            String checkSql = "SELECT COUNT(*) FROM Team WHERE id = ?";
+            String insertSql = "INSERT INTO Team(id, name, continent) VALUES (?, ?, ?::continent_enum)";
+            String updateSql = "UPDATE Team SET name = ?, continent = ?::continent_enum WHERE id = ?";
+            String clearPlayersSql = "UPDATE Player SET id_team = NULL WHERE id_team = ?";
+            String attachPlayerSql = "UPDATE Player SET id_team = ? WHERE id = ?";
 
-                teamStmt.setString(1, team.getName());
-                teamStmt.setString(2, team.getContinent().name());
-                teamStmt.setInt(3, team.getId());
-                teamStmt.executeUpdate();
+            // Vérifier si l'équipe existe déjà (CORRECTION DU BUG ICI)
+            checkStmt = connection.prepareStatement(checkSql);
+            checkStmt.setInt(1, team.getId());
+            rs = checkStmt.executeQuery();
+            rs.next();
+            boolean teamExists = rs.getInt(1) > 0;
+            rs.close();
 
-                clearStmt.setInt(1, team.getId());
-                clearStmt.executeUpdate();
-
-                for (Player player : team.getPlayers()) {
-                    attachStmt.setInt(1, team.getId());
-                    attachStmt.setInt(2, player.getId());
-                    attachStmt.executeUpdate();
-                }
-
-                connection.commit();
-
-            } catch (Exception e) {
-                connection.rollback();
-                throw e;
+            if (!teamExists) {
+                insertStmt = connection.prepareStatement(insertSql);
+                insertStmt.setInt(1, team.getId());
+                insertStmt.setString(2, team.getName());
+                insertStmt.setString(3, team.getContinent().name());
+                insertStmt.executeUpdate();
+            } else {
+                updateStmt = connection.prepareStatement(updateSql);
+                updateStmt.setString(1, team.getName());
+                updateStmt.setString(2, team.getContinent().name());
+                updateStmt.setInt(3, team.getId());
+                updateStmt.executeUpdate();
             }
 
-        } catch (SQLException e) {
-            throw new RuntimeException(e);
-        }
+            // Dissocier tous les joueurs de cette équipe
+            clearStmt = connection.prepareStatement(clearPlayersSql);
+            clearStmt.setInt(1, team.getId());
+            clearStmt.executeUpdate();
 
-        return team;
+            // Ré-attacher les joueurs actuels
+            attachStmt = connection.prepareStatement(attachPlayerSql);
+            for (Player player : team.getPlayers()) {
+                attachStmt.setInt(1, team.getId());
+                attachStmt.setInt(2, player.getId());
+                attachStmt.executeUpdate();
+            }
+
+            connection.commit();
+            return team;
+
+        } catch (SQLException e) {
+            try { if (connection != null) connection.rollback(); } catch (Exception ignored) {}
+            throw new RuntimeException(e);
+        } finally {
+            try { if (rs != null) rs.close(); } catch (Exception ignored) {}
+            try { if (checkStmt != null) checkStmt.close(); } catch (Exception ignored) {}
+            try { if (insertStmt != null) insertStmt.close(); } catch (Exception ignored) {}
+            try { if (updateStmt != null) updateStmt.close(); } catch (Exception ignored) {}
+            try { if (clearStmt != null) clearStmt.close(); } catch (Exception ignored) {}
+            try { if (attachStmt != null) attachStmt.close(); } catch (Exception ignored) {}
+            try { if (connection != null) connection.close(); } catch (Exception ignored) {}
+        }
     }
 
-
-
     public List<Team> findTeamsByPlayerName(String playerName) {
-
+        Connection connection = null;
+        PreparedStatement stmt = null;
+        ResultSet rs = null;
         List<Team> teams = new ArrayList<>();
 
-        String sql = """
-            SELECT DISTINCT t.id, t.name, t.continent
-            FROM team t
-            JOIN player p ON p.id_team = t.id
-            WHERE p.name ILIKE ?
-        """;
-
-        try (Connection connection = dbConnection.getDBConnection();
-             PreparedStatement stmt = connection.prepareStatement(sql)) {
-
+        try {
+            connection = dbConnection.getDBConnection();
+            String sql = "SELECT DISTINCT t.id, t.name, t.continent " +
+                    "FROM Team t " +
+                    "JOIN Player p ON p.id_team = t.id " +
+                    "WHERE p.name ILIKE ?";
+            stmt = connection.prepareStatement(sql);
             stmt.setString(1, "%" + playerName + "%");
-            ResultSet rs = stmt.executeQuery();
+            rs = stmt.executeQuery();
 
             while (rs.next()) {
                 teams.add(new Team(
@@ -210,43 +263,44 @@ public class DataRetriever {
 
         } catch (SQLException e) {
             throw new RuntimeException(e);
+        } finally {
+            try { if (rs != null) rs.close(); } catch (Exception ignored) {}
+            try { if (stmt != null) stmt.close(); } catch (Exception ignored) {}
+            try { if (connection != null) connection.close(); } catch (Exception ignored) {}
         }
 
         return teams;
     }
 
-
-
-    public List<Player> findPlayersByCriteria(
-            String playerName,
-            PlayerPositionEnum position,
-            String teamName,
-            ContinentEnum continent,
-            int page,
-            int size) {
-
+    public List<Player> findPlayersByCriteria(String playerName, PlayerPositionEnum position,
+                                              String teamName, ContinentEnum continent,
+                                              int page, int size) {
+        Connection connection = null;
+        PreparedStatement stmt = null;
+        ResultSet rs = null;
         List<Player> players = new ArrayList<>();
         int offset = (page - 1) * size;
 
-        StringBuilder sql = new StringBuilder("""
-            SELECT p.id, p.name, p.age, p.position
-            FROM player p
-            LEFT JOIN team t ON p.id_team = t.id
-            WHERE 1=1
-        """);
+        try {
+            connection = dbConnection.getDBConnection();
 
-        if (playerName != null) sql.append(" AND p.name ILIKE ?");
-        if (position != null) sql.append(" AND p.position = ?");
-        if (teamName != null) sql.append(" AND t.name ILIKE ?");
-        if (continent != null) sql.append(" AND t.continent = ?");
+            StringBuilder sql = new StringBuilder(
+                    "SELECT p.id, p.name, p.age, p.position " +
+                            "FROM Player p " +
+                            "LEFT JOIN Team t ON p.id_team = t.id " +
+                            "WHERE 1=1"
+            );
 
-        sql.append(" ORDER BY p.id LIMIT ? OFFSET ?");
+            if (playerName != null) sql.append(" AND p.name ILIKE ?");
+            if (position != null) sql.append(" AND p.position = ?::position_enum");
+            if (teamName != null) sql.append(" AND t.name ILIKE ?");
+            if (continent != null) sql.append(" AND t.continent = ?::continent_enum");
 
-        try (Connection connection = dbConnection.getDBConnection();
-             PreparedStatement stmt = connection.prepareStatement(sql.toString())) {
+            sql.append(" ORDER BY p.id LIMIT ? OFFSET ?");
+
+            stmt = connection.prepareStatement(sql.toString());
 
             int index = 1;
-
             if (playerName != null) stmt.setString(index++, "%" + playerName + "%");
             if (position != null) stmt.setString(index++, position.name());
             if (teamName != null) stmt.setString(index++, "%" + teamName + "%");
@@ -255,7 +309,7 @@ public class DataRetriever {
             stmt.setInt(index++, size);
             stmt.setInt(index, offset);
 
-            ResultSet rs = stmt.executeQuery();
+            rs = stmt.executeQuery();
 
             while (rs.next()) {
                 players.add(new Player(
@@ -269,9 +323,12 @@ public class DataRetriever {
 
         } catch (SQLException e) {
             throw new RuntimeException(e);
+        } finally {
+            try { if (rs != null) rs.close(); } catch (Exception ignored) {}
+            try { if (stmt != null) stmt.close(); } catch (Exception ignored) {}
+            try { if (connection != null) connection.close(); } catch (Exception ignored) {}
         }
 
         return players;
     }
 }
-

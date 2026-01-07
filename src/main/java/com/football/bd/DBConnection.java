@@ -6,11 +6,20 @@ import java.sql.SQLException;
 
 public class DBConnection {
 
-    private final String url = "jdbc:postgresql://localhost:5432/mini_football_db";
-    private final String user = "mini_football_db_manager";
-    private final String password = "malalatiana";
-
     public Connection getDBConnection() throws SQLException {
+
+        String url = System.getenv("JDBC_URL");
+        String user = System.getenv("USERNAME");
+        String password = System.getenv("PASSWORD");
+
+        if (url == null || user == null || password == null) {
+            throw new RuntimeException("Variables d'environnement manquantes");
+        }
+        System.out.println(System.getenv("JDBC_URL"));
+        System.out.println(System.getenv("USERNAME"));
+        System.out.println(System.getenv("PASSWORD"));
+
         return DriverManager.getConnection(url, user, password);
     }
+
 }
